@@ -71,7 +71,7 @@ jobs:
 
           cat > caption.txt <<EOF
           *LLVM Update*
-          📆 $(date +'%Y-%m-%d')
+          $(date +'%Y-%m-%d')
           #LLVM
 
           *Release tag*: \`${TAG}\`
