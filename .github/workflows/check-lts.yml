@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       MAKEFILE_URL: "https://android.googlesource.com/kernel/common/+/refs/heads/android12-5.10-lts/Makefile?format=TEXT"
+      BRANCH_URL: "https://android.googlesource.com/kernel/common/+/refs/heads/android12-5.10-lts"
 
     steps:
       - name: Checkout repo
@@ -69,13 +70,14 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
         run: |
           KERNEL_VER="${{ steps.fetch.outputs.kernel_ver }}"
+          BRANCH_URL="${{ env.BRANCH_URL }}"
 
           cat > caption.txt <<EOF
-          Google already merged ${KERNEL_VER} into android12-5.10-lts
+          [Google already merged ${KERNEL_VER} into android12\-5\.10\-lts](${BRANCH_URL})
           EOF
 
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
-            -d disable_web_page_preview=true \
+            -d disable_web_page_preview=false \
             -d parse_mode=Markdown \
             --data-urlencode text@caption.txt
