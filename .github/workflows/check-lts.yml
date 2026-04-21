@@ -1,0 +1,81 @@
+name: Check android12-5.10-lts Update
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  actions: read
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */3 * * *'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      MAKEFILE_URL: "https://android.googlesource.com/kernel/common/+/refs/heads/android12-5.10-lts/Makefile?format=TEXT"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch latest kernel version
+        id: fetch
+        run: |
+          MAKEFILE=$(curl -fsSL "$MAKEFILE_URL" | base64 -d)
+
+          VERSION=$(echo "$MAKEFILE" | grep -m1 '^VERSION' | awk -F'=' '{print $2}' | tr -d ' ')
+          PATCHLEVEL=$(echo "$MAKEFILE" | grep -m1 '^PATCHLEVEL' | awk -F'=' '{print $2}' | tr -d ' ')
+          SUBLEVEL=$(echo "$MAKEFILE" | grep -m1 '^SUBLEVEL' | awk -F'=' '{print $2}' | tr -d ' ')
+
+          KERNEL_VER="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"
+          TAG="android12-5.10-lts-${KERNEL_VER}"
+
+          echo "kernel_ver=$KERNEL_VER" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Check if already notified
+        id: exists
+        run: |
+          TAG="${{ steps.fetch.outputs.tag }}"
+          if git tag --list "$TAG" | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Already up to date
+        if: steps.exists.outputs.exists == 'true'
+        run: echo "Kernel ${{ steps.fetch.outputs.kernel_ver }} already notified, skipping."
+
+      - name: Create tag
+        if: steps.exists.outputs.exists == 'false'
+        run: |
+          git config user.name "anyaanasera"
+          git config user.email "anyaprjkt.my.id"
+          git tag "${{ steps.fetch.outputs.tag }}"
+          git push origin "${{ steps.fetch.outputs.tag }}"
+
+      - name: Telegram Notify
+        if: steps.exists.outputs.exists == 'false'
+        env:
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+        run: |
+          KERNEL_VER="${{ steps.fetch.outputs.kernel_ver }}"
+
+          cat > caption.txt <<EOF
+          Google already merged ${KERNEL_VER} into android12-5.10-lts
+          EOF
+
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT_ID}" \
+            -d disable_web_page_preview=true \
+            -d parse_mode=Markdown \
+            --data-urlencode text@caption.txt
